@@ -1,0 +1,140 @@
+---
+title: "finalProjectDoc"
+format: html
+editor: visual
+---
+
+## Importing packages
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(lme4)
+library(ggplot2)
+```
+
+### Importing data
+
+data comes from the Kaggle Pizza Price Prediction dataset
+
+<https://www.kaggle.com/datasets/knightbearr/pizza-price-prediction/data>
+
+```{r}
+pizza_data <- read_csv("~/classes/DS303_SP25/finalproj/pizza_v1.csv")
+
+str(pizza_data)
+```
+
+quickly editing the data
+
+```{r}
+pizza_data <- pizza_data %>%
+  mutate(price_rupiah = gsub("Rp|,", "", price_rupiah),  
+         price_rupiah = as.numeric(price_rupiah)) 
+
+pizza_data$size <- factor(pizza_data$size)
+```
+
+### Exploring the data
+
+```{r}
+ggplot(pizza_data, aes(x = diameter, y = price_rupiah)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "Pizza Price vs Diameter", x = "Diameter (inches)", y = "Price (Rp)") +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot(pizza_data, aes(x = size, y = price_rupiah)) +
+  geom_boxplot(fill = "orange", alpha = 0.7) +
+  labs(title = "Pizza Price by Size Category", x = "Size", y = "Price (Rp)") +
+  theme_minimal()
+
+```
+
+```{r}
+ggplot(pizza_data, aes(x = company, y = price_rupiah)) +
+  geom_jitter(width = 0.2, alpha = 0.5, color = "darkgreen") +
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "red") +
+  labs(title = "Pizza Prices by Company", x = "Company", y = "Price (Rp)") +
+  theme_minimal()
+
+```
+
+### Feature engineering
+
+price per inch
+
+```{r}
+pizza_data <- pizza_data %>%
+  mutate(price_per_inch = price_rupiah / diameter)
+
+```
+
+yes/no columns to binary
+
+```{r}
+pizza_data <- pizza_data %>%
+  mutate(
+    extra_sauce_bin = ifelse(extra_sauce == "yes", 1, 0),
+    extra_cheese_bin = ifelse(extra_cheese == "yes", 1, 0)
+  )
+```
+
+one hot encoding
+
+```{r}
+library(fastDummies)
+pizza_data <- fastDummies::dummy_cols(pizza_data, select_columns = c("variant", "company"))
+
+```
+
+### Building the models
+
+starting with a basic model, predicting based on diameter
+
+```{r}
+model1 <- lm(price_rupiah ~ diameter, data = pizza_data)
+summary(model1)
+
+```
+
+Predicting based on both diameter and size (small, med, large, etc.)
+
+```{r}
+pizza_data$size <- factor(pizza_data$size) # turn into factors
+model2 <- lm(price_rupiah ~ diameter + size, data = pizza_data)
+summary(model2)
+
+```
+
+### mixed models
+
+comparing based on the different companies
+
+```{r}
+pizza_data$company <- factor(pizza_data$company) #set company to factor
+
+mixed_model <- lmer(price_rupiah ~ diameter + extra_cheese_bin + extra_sauce_bin + 
+                    (1 | company), data = pizza_data)
+
+summary(mixed_model)
+
+```
+
+### Does diameter size change based on company
+
+```{r}
+mixed_model2 <- lmer(price_rupiah ~ diameter + extra_cheese_bin + extra_sauce_bin + 
+                     (diameter | company), data = pizza_data)
+summary(mixed_model2)
+```
+
+### Model Comparisons
+
+```{r}
+library(caret)
+AIC(model1, model2, mixed_model, mixed_model2)
+
+```
